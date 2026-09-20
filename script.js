@@ -92,43 +92,100 @@ function addCreditRow(name = '', amount = '') {
   calculateAll();
 }
 
-// Tambah Baris Toko SKR / Retur (Responsive Layout)
-function addSkrRow(name = '', type = 'Full', amount = '') {
+// Tambah Baris Toko SKR / Retur (Menghitung Otomatis: Tagihan Awal - Tagihan Akhir)
+function addSkrRow(name = '', tagihanAwal = '', tagihanAkhir = '') {
   skrRowCounter++;
   const container = document.getElementById('skrRowsContainer');
   if (!container) return;
 
   const rowDiv = document.createElement('div');
   rowDiv.id = `skr-row-${skrRowCounter}`;
-  rowDiv.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900 p-3 sm:p-2.5 rounded-xl border border-slate-700/60";
+  rowDiv.className = "flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-slate-900 p-3 rounded-xl border border-slate-700/60";
+  
   rowDiv.innerHTML = `
+    <!-- Nama Toko -->
     <input 
       type="text" 
       placeholder="Nama Toko" 
-      value="${name}"
-      class="w-full sm:flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition"
+      value="${name}" 
+      class="w-full md:w-1/4 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition" 
     />
-    <div class="flex items-center gap-2 w-full sm:flex-1">
-      <select class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-xs font-semibold text-amber-400 focus:outline-none focus:border-amber-500 transition">
-        <option value="Full" ${type === 'Full' ? 'selected' : ''}>Full SKR</option>
-        <option value="Partial" ${type === 'Partial' ? 'selected' : ''}>Partial SKR</option>
-      </select>
-      <div class="relative flex-1">
-        <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>
-        <input 
-          type="number" 
-          placeholder="Nominal Retur" 
-          value="${amount}"
-          oninput="calculateAll()"
-          class="skr-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition"
-        />
-      </div>
-      <button onclick="removeRow('skr-row-${skrRowCounter}')" class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition" title="Hapus">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
+
+    <!-- Input Tagihan Awal -->
+    <div class="relative flex-1">
+      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-slate-400">Awal: Rp</span>
+      <input 
+        type="number" 
+        placeholder="Tagihan Awal" 
+        value="${tagihanAwal}" 
+        id="skr-awal-${skrRowCounter}"
+        oninput="updateSkrItemCalculation(${skrRowCounter})" 
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition" 
+      />
     </div>
+
+    <!-- Input Tagihan Akhir -->
+    <div class="relative flex-1">
+      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-slate-400">Akhir: Rp</span>
+      <input 
+        type="number" 
+        placeholder="Tagihan Akhir" 
+        value="${tagihanAkhir}" 
+        id="skr-akhir-${skrRowCounter}"
+        oninput="updateSkrItemCalculation(${skrRowCounter})" 
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition" 
+      />
+    </div>
+
+    <!-- Hasil Nominal SKR (Read-only, terhubung ke kalkulasi utama) -->
+    <div class="relative flex-1">
+      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-amber-400">SKR: Rp</span>
+      <input 
+        type="number" 
+        placeholder="0" 
+        readonly 
+        id="skr-result-${skrRowCounter}"
+        class="skr-amount-input w-full bg-slate-800/80 border border-amber-500/40 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-black text-amber-400 focus:outline-none cursor-not-allowed" 
+      />
+    </div>
+
+    <!-- Tombol Hapus -->
+    <button 
+      onclick="removeRow('skr-row-${skrRowCounter}')" 
+      class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition" 
+      title="Hapus"
+    >
+      <i class="fa-solid fa-trash-can"></i>
+    </button>
   `;
+
   container.appendChild(rowDiv);
+  
+  // Jika dipanggil dengan nilai bawaan, langsung hitung
+  if (tagihanAwal || tagihanAkhir) {
+    updateSkrItemCalculation(skrRowCounter);
+  } else {
+    calculateAll();
+  }
+}
+
+// Fungsi Hitung Selisih SKR Per-Baris
+function updateSkrItemCalculation(rowId) {
+  const awalElem = document.getElementById(`skr-awal-${rowId}`);
+  const akhirElem = document.getElementById(`skr-akhir-${rowId}`);
+  const resultElem = document.getElementById(`skr-result-${rowId}`);
+
+  if (!awalElem || !akhirElem || !resultElem) return;
+
+  const awal = parseFloat(awalElem.value) || 0;
+  const akhir = parseFloat(akhirElem.value) || 0;
+
+  // Rumus: Nominal SKR = Tagihan Awal - Tagihan Akhir
+  const nominalSkr = Math.max(0, awal - akhir);
+
+  resultElem.value = nominalSkr > 0 ? nominalSkr : 0;
+
+  // Panggil kalkulasi total utama
   calculateAll();
 }
 
@@ -143,7 +200,8 @@ function removeRow(rowId) {
 
 // Kalkulasi Utama
 function calculateAll() {
-  const tagihanInput = parseFloat(document.getElementById('totalTagihanInput').value) || 0;
+  const tagihanElem = document.getElementById('totalTagihanInput');
+  const tagihanInput = tagihanElem ? (parseFloat(tagihanElem.value) || 0) : 0;
 
   let totalCredit = 0;
   const creditInputs = document.querySelectorAll('.credit-amount-input');
@@ -169,14 +227,22 @@ function calculateAll() {
     if (subtotalElem) subtotalElem.textContent = formatRupiah(subtotal);
   });
 
-  document.getElementById('summaryTagihan').textContent = formatRupiah(tagihanInput);
-  document.getElementById('summaryCredit').textContent = formatRupiah(totalCredit);
-  document.getElementById('summarySkr').textContent = formatRupiah(totalSkr);
-  document.getElementById('summarySetoranBersih').textContent = formatRupiah(setoranBersih);
-  document.getElementById('totalCashDisplay').textContent = formatRupiah(totalCash);
+  const summaryTagihan = document.getElementById('summaryTagihan');
+  const summaryCredit = document.getElementById('summaryCredit');
+  const summarySkr = document.getElementById('summarySkr');
+  const summarySetoranBersih = document.getElementById('summarySetoranBersih');
+  const totalCashDisplay = document.getElementById('totalCashDisplay');
+
+  if (summaryTagihan) summaryTagihan.textContent = formatRupiah(tagihanInput);
+  if (summaryCredit) summaryCredit.textContent = formatRupiah(totalCredit);
+  if (summarySkr) summarySkr.textContent = formatRupiah(totalSkr);
+  if (summarySetoranBersih) summarySetoranBersih.textContent = formatRupiah(setoranBersih);
+  if (totalCashDisplay) totalCashDisplay.textContent = formatRupiah(totalCash);
 
   const statusBadge = document.getElementById('balanceStatusBadge');
   const differenceText = document.getElementById('balanceDifferenceText');
+
+  if (!statusBadge || !differenceText) return;
 
   if (tagihanInput === 0 && totalCash === 0 && totalCredit === 0 && totalSkr === 0) {
     statusBadge.className = "inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-base font-bold bg-slate-700 text-slate-300";
@@ -196,21 +262,26 @@ function calculateAll() {
     statusBadge.innerHTML = `<i class="fa-solid fa-circle-plus"></i> UANG LEBIH (${formatRupiah(diff)})`;
     differenceText.textContent = `Fisik uang tunai lebih besar ${formatRupiah(diff)} dibanding setoran bersih.`;
   } else {
-    statusBadge.className = "inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-base font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30";
+    statusBadge.className = "inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-base font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30";
     statusBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> UANG KURANG (${formatRupiah(Math.abs(diff))})`;
     differenceText.textContent = `Fisik uang tunai kurang ${formatRupiah(Math.abs(diff))} dari setoran bersih!`;
   }
 }
 
+// Reset Semua Data
 function resetAll() {
   if (confirm('Apakah Anda yakin ingin mereset seluruh perhitungan?')) {
-    document.getElementById('totalTagihanInput').value = '';
+    const totalTagihanInput = document.getElementById('totalTagihanInput');
+    if (totalTagihanInput) totalTagihanInput.value = '';
+    
     document.getElementById('creditRowsContainer').innerHTML = '';
     document.getElementById('skrRowsContainer').innerHTML = '';
+    
     denominations.forEach(item => {
       const elem = document.getElementById(`denom-${item.value}`);
       if (elem) elem.value = '';
     });
+    
     addCreditRow();
     addSkrRow();
     calculateAll();
