@@ -13,6 +13,7 @@ const denominations = [
 ];
 
 let creditRowCounter = 0;
+let skrRowCounter = 0;
 
 // Format Angka ke Rupiah
 function formatRupiah(amount) {
@@ -81,7 +82,7 @@ function addCreditRow(name = '', amount = '') {
         class="credit-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm font-bold text-slate-100 focus:outline-none focus:border-blue-500 transition"
       />
     </div>
-    <button onclick="removeCreditRow('credit-row-${creditRowCounter}')" class="p-2 text-slate-400 hover:text-rose-400 transition" title="Hapus">
+    <button onclick="removeRow('credit-row-${creditRowCounter}')" class="p-2 text-slate-400 hover:text-rose-400 transition" title="Hapus">
       <i class="fa-solid fa-trash-can"></i>
     </button>
   `;
@@ -89,8 +90,46 @@ function addCreditRow(name = '', amount = '') {
   calculateAll();
 }
 
-// Hapus Baris Toko Credit
-function removeCreditRow(rowId) {
+// Tambah Baris Toko SKR / Retur
+function addSkrRow(name = '', type = 'Full', amount = '') {
+  skrRowCounter++;
+  const container = document.getElementById('skrRowsContainer');
+  if (!container) return;
+
+  const rowDiv = document.createElement('div');
+  rowDiv.id = `skr-row-${skrRowCounter}`;
+  rowDiv.className = "flex items-center gap-2 bg-slate-900 p-2.5 rounded-xl border border-slate-700/60";
+  rowDiv.innerHTML = `
+    <input 
+      type="text" 
+      placeholder="Nama Toko" 
+      value="${name}"
+      class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition"
+    />
+    <select class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-xs font-semibold text-amber-400 focus:outline-none focus:border-amber-500 transition">
+      <option value="Full" ${type === 'Full' ? 'selected' : ''}>Full SKR</option>
+      <option value="Partial" ${type === 'Partial' ? 'selected' : ''}>Partial SKR</option>
+    </select>
+    <div class="relative flex-1">
+      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>
+      <input 
+        type="number" 
+        placeholder="Nominal Retur" 
+        value="${amount}"
+        oninput="calculateAll()"
+        class="skr-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition"
+      />
+    </div>
+    <button onclick="removeRow('skr-row-${skrRowCounter}')" class="p-2 text-slate-400 hover:text-rose-400 transition" title="Hapus">
+      <i class="fa-solid fa-trash-can"></i>
+    </button>
+  `;
+  container.appendChild(rowDiv);
+  calculateAll();
+}
+
+// Hapus Baris Elemen (Credit atau SKR)
+function removeRow(rowId) {
   const row = document.getElementById(rowId);
   if (row) {
     row.remove();
@@ -107,14 +146,20 @@ function calculateAll() {
   let totalCredit = 0;
   const creditInputs = document.querySelectorAll('.credit-amount-input');
   creditInputs.forEach(input => {
-    const val = parseFloat(input.value) || 0;
-    totalCredit += val;
+    totalCredit += parseFloat(input.value) || 0;
   });
 
-  // 3. Setoran Bersih Target
-  const setoranBersih = tagihanInput - totalCredit;
+  // 3. Total Toko SKR / Retur
+  let totalSkr = 0;
+  const skrInputs = document.querySelectorAll('.skr-amount-input');
+  skrInputs.forEach(input => {
+    totalSkr += parseFloat(input.value) || 0;
+  });
 
-  // 4. Fisik Uang Tunai (Cash)
+  // 4. Setoran Bersih Target = Tagihan - Credit - SKR
+  const setoranBersih = tagihanInput - totalCredit - totalSkr;
+
+  // 5. Fisik Uang Tunai (Cash)
   let totalCash = 0;
   denominations.forEach(item => {
     const elem = document.getElementById(`denom-${item.value}`);
@@ -125,17 +170,18 @@ function calculateAll() {
     if (subtotalElem) subtotalElem.textContent = formatRupiah(subtotal);
   });
 
-  // Update Tampilan Ringkasan
+  // Update Tampilan Ringkasan Top Dashboard
   document.getElementById('summaryTagihan').textContent = formatRupiah(tagihanInput);
   document.getElementById('summaryCredit').textContent = formatRupiah(totalCredit);
+  document.getElementById('summarySkr').textContent = formatRupiah(totalSkr);
   document.getElementById('summarySetoranBersih').textContent = formatRupiah(setoranBersih);
   document.getElementById('totalCashDisplay').textContent = formatRupiah(totalCash);
 
-  // 5. Update Status Balance
+  // 6. Update Status Balance
   const statusBadge = document.getElementById('balanceStatusBadge');
   const differenceText = document.getElementById('balanceDifferenceText');
 
-  if (tagihanInput === 0 && totalCash === 0 && totalCredit === 0) {
+  if (tagihanInput === 0 && totalCash === 0 && totalCredit === 0 && totalSkr === 0) {
     statusBadge.className = "inline-flex items-center gap-2 px-4 py-2 rounded-xl text-base font-bold bg-slate-700 text-slate-300";
     statusBadge.innerHTML = `<i class="fa-solid fa-circle-info"></i> Masukkan data untuk melihat status`;
     differenceText.textContent = "";
@@ -164,11 +210,13 @@ function resetAll() {
   if (confirm('Apakah Anda yakin ingin mereset seluruh perhitungan?')) {
     document.getElementById('totalTagihanInput').value = '';
     document.getElementById('creditRowsContainer').innerHTML = '';
+    document.getElementById('skrRowsContainer').innerHTML = '';
     denominations.forEach(item => {
       const elem = document.getElementById(`denom-${item.value}`);
       if (elem) elem.value = '';
     });
     addCreditRow();
+    addSkrRow();
     calculateAll();
   }
 }
@@ -177,4 +225,5 @@ function resetAll() {
 window.addEventListener('DOMContentLoaded', () => {
   renderDenominations();
   addCreditRow();
+  addSkrRow();
 });
