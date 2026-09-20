@@ -10,8 +10,17 @@ input[type=number] {
 }
 
 /* Transisi halus untuk efek hover & fokus */
-input, button {
+input, button, select {
   transition: all 0.2s ease-in-out;
+}
+
+/* Mencegah zoom otomatis saat input diklik di HP (iOS/Safari) */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  select {
+    font-size: 16px !important;
+  }
 }
 
 /* Custom Scrollbar */
