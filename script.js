@@ -341,7 +341,7 @@ function calculateAll() {
   });
 
   // RUMUS UTAMA: Tagihan - (Credit + SKR + Transfer + Kasbon + Biaya)
-  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer - totalKasbon - totalBiaya;
+  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer + totalKasbon - totalBiaya;
 
   // Total Uang Tunai / Fisik
   let totalCash = 0;
