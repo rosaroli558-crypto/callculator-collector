@@ -3,6 +3,152 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kalkulator Setoran Collactor</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen py-8 px-4 font-sans antialiased">
+  <div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Header Section -->
+    <header class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-4">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-extrabold text-blue-400 tracking-tight flex items-center justify-center md:justify-start gap-3">
+          <i class="fa-solid fa-calculator text-blue-500"></i>
+          Kalkulator Setoran Toko
+        </h1>
+        <p class="text-slate-400 text-sm mt-1">Hitung pecahan uang tunai, tagihan harian, credit, dan retur (SKR).</p>
+      </div>
+      <button onclick="resetAll()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-md">
+        <i class="fa-solid fa-rotate-left"></i> Reset Form
+      </button>
+    </header>
+
+    <!-- Ringkasan & Hasil Akhir (4 Grid Summary) -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+      <!-- Total Tagihan -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 shadow-lg">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Tagihan Hari Ini</span>
+        <div id="summaryTagihan" class="text-xl font-black text-amber-400 mt-2">Rp 0</div>
+        <p class="text-[10px] text-slate-500 mt-1">Sesuai input manual</p>
+      </div>
+
+      <!-- Total Credit -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 shadow-lg">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Toko Credit</span>
+        <div id="summaryCredit" class="text-xl font-black text-rose-400 mt-2">Rp 0</div>
+        <p class="text-[10px] text-slate-500 mt-1">Belum dibayar</p>
+      </div>
+
+      <!-- Total SKR / Retur -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-4 shadow-lg">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Retur (SKR)</span>
+        <div id="summarySkr" class="text-xl font-black text-orange-400 mt-2">Rp 0</div>
+        <p class="text-[10px] text-slate-500 mt-1">Full & Partial SKR</p>
+      </div>
+
+      <!-- Setoran Bersih -->
+      <div class="bg-slate-800 border border-blue-500/50 rounded-2xl p-4 shadow-lg bg-gradient-to-br from-slate-800 to-blue-900/30">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-blue-300">Setoran Bersih</span>
+        <div id="summarySetoranBersih" class="text-xl font-black text-emerald-400 mt-2">Rp 0</div>
+        <p class="text-[10px] text-slate-400 mt-1">Tagihan - Credit - SKR</p>
+      </div>
+    </section>
+
+    <!-- Form Utama: Input Tagihan, Credit & SKR -->
+    <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+      <h2 class="text-lg font-bold text-slate-200 border-b border-slate-700 pb-3 flex items-center gap-2">
+        <i class="fa-solid fa-file-invoice-dollar text-emerald-400"></i>
+        1. Rincian Tagihan, Credit & Retur (SKR)
+      </h2>
+
+      <!-- Total Tagihan Input -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-300 mb-2">Total Tagihan Hari Ini (Rp)</label>
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold">Rp</span>
+          <input 
+            type="number" 
+            id="totalTagihanInput" 
+            placeholder="0"
+            oninput="calculateAll()"
+            class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-lg font-bold text-slate-100 focus:outline-none focus:border-blue-500 transition"
+          />
+        </div>
+      </div>
+
+      <!-- Section Toko Credit -->
+      <div class="space-y-3 pt-2 border-t border-slate-700/50">
+        <div class="flex justify-between items-center">
+          <label class="text-sm font-semibold text-rose-300 flex items-center gap-2">
+            <i class="fa-solid fa-credit-card"></i> Daftar Toko Credit / Bon
+          </label>
+          <button onclick="addCreditRow()" class="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Tambah Toko Credit
+          </button>
+        </div>
+        <div id="creditRowsContainer" class="space-y-2">
+          <!-- Item toko credit ditambahkan via JS -->
+        </div>
+      </div>
+
+      <!-- Section Toko SKR / Retur -->
+      <div class="space-y-3 pt-2 border-t border-slate-700/50">
+        <div class="flex justify-between items-center">
+          <label class="text-sm font-semibold text-amber-300 flex items-center gap-2">
+            <i class="fa-solid fa-box-open"></i> Daftar Toko Retur / Penolakan (SKR)
+          </label>
+          <button onclick="addSkrRow()" class="px-3 py-1.5 bg-amber-600/80 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Tambah Toko SKR
+          </button>
+        </div>
+        <div id="skrRowsContainer" class="space-y-2">
+          <!-- Item toko SKR ditambahkan via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Pecahan Uang Tunai -->
+    <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-slate-700 pb-3">
+        <h2 class="text-lg font-bold text-slate-200 flex items-center gap-2">
+          <i class="fa-solid fa-money-bill-wave text-blue-400"></i>
+          2. Hitung Fisik Uang Tunai
+        </h2>
+        <div class="text-right">
+          <span class="text-xs text-slate-400 block">Total Uang Fisik:</span>
+          <span id="totalCashDisplay" class="text-xl font-black text-blue-400">Rp 0</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="cashDenominationsContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- Status Balance Check -->
+    <section class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl text-center space-y-3">
+      <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Status Kesesuaian Setoran</h3>
+      <div id="balanceStatusBadge" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-base font-bold bg-slate-700 text-slate-300">
+        <i class="fa-solid fa-circle-info"></i> Masukkan data untuk melihat status
+      </div>
+      <p id="balanceDifferenceText" class="text-sm text-slate-400 font-medium"></p>
+    </section>
+
+  </div>
+
+  <!-- Custom JavaScript -->
+  <script src="script.js"></script>
+</body>
+</html><!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kalkulator Setoran & Hitung Uang Toko</title>
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
