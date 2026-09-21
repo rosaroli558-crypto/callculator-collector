@@ -341,9 +341,8 @@ function calculateAll() {
   });
 
   // RUMUS SETORAN BERSIH (CASH): 
-  // Tagihan dikurangi Credit, SKR, Kasbon, dan Biaya. 
-  // (Transfer tidak ikut dikurangi karena transfer dibayar terpisah via bank/non-tunai).
-  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalKasbon - totalBiaya;
+  // Tagihan dikurangi Credit, SKR, dan Transfer. 
+  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer;
 
   // RUMUS SETORAN + TRANSFER (Total tagihan yang berhasil ditagih dalam bentuk cash maupun transfer)
   const setoranPlusTransfer = setoranBersih + totalTransfer;
