@@ -340,8 +340,13 @@ function calculateAll() {
     totalBiaya += parseFloat(input.value) || 0;
   });
 
-  // RUMUS UTAMA: Tagihan - (Credit + SKR + Transfer + Kasbon + Biaya)
-  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer - totalKasbon - totalBiaya;
+  // RUMUS SETORAN BERSIH (CASH): 
+  // Tagihan dikurangi Credit, SKR, Kasbon, dan Biaya. 
+  // (Transfer tidak ikut dikurangi karena transfer dibayar terpisah via bank/non-tunai).
+  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalKasbon - totalBiaya;
+
+  // RUMUS SETORAN + TRANSFER (Total tagihan yang berhasil ditagih dalam bentuk cash maupun transfer)
+  const setoranPlusTransfer = setoranBersih + totalTransfer;
 
   // Total Uang Tunai / Fisik
   let totalCash = 0;
@@ -367,6 +372,7 @@ function calculateAll() {
   setElemText('summaryKasbon', formatRupiah(totalKasbon));
   setElemText('summaryBiaya', formatRupiah(totalBiaya));
   setElemText('summarySetoranBersih', formatRupiah(setoranBersih));
+  setElemText('summarySetoranPlusTransfer', formatRupiah(setoranPlusTransfer)); // Memperbarui card Setoran + Transfer
   setElemText('totalCashDisplay', formatRupiah(totalCash));
 
   // Status Balance Uang Fisik vs Setoran Bersih
