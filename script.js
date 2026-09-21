@@ -27,7 +27,7 @@ function formatRupiah(amount) {
   }).format(amount);
 }
 
-// Generate Komponen Pecahan Uang (Responsive di HP)
+// Generate Komponen Pecahan Uang
 function renderDenominations() {
   const container = document.getElementById('cashDenominationsContainer');
   if (!container) return;
@@ -95,7 +95,7 @@ function addCreditRow(name = '', amount = '') {
   calculateAll();
 }
 
-// 2. Tambah Baris Toko SKR / Retur (Awal - Akhir = SKR)
+// 2. Tambah Baris Toko SKR / Retur
 function addSkrRow(name = '', tagihanAwal = '', tagihanAkhir = '') {
   skrRowCounter++;
   const container = document.getElementById('skrRowsContainer');
@@ -176,7 +176,7 @@ function updateSkrItemCalculation(rowId) {
   calculateAll();
 }
 
-// 3. Tambah Baris Transfer Bank / Non-Tunai
+// 3. Tambah Baris Transfer Bank
 function addTransferRow(name = '', bank = '', amount = '') {
   transferRowCounter++;
   const container = document.getElementById('transferRowsContainer');
@@ -260,7 +260,7 @@ function addKasbonRow(name = '', note = '', amount = '') {
   calculateAll();
 }
 
-// 5. Tambah Baris Biaya Operational (Bensin, Tol, Parkir, dll)
+// 5. Tambah Baris Biaya Operasional
 function addBiayaRow(description = '', amount = '') {
   biayaRowCounter++;
   const container = document.getElementById('biayaRowsContainer');
@@ -305,7 +305,7 @@ function removeRow(rowId) {
   }
 }
 
-// Kalkulasi Utama (Diperbarui dengan Transfer, Kasbon, Biaya)
+// Kalkulasi Utama
 function calculateAll() {
   const tagihanElem = document.getElementById('totalTagihanInput');
   const tagihanInput = tagihanElem ? (parseFloat(tagihanElem.value) || 0) : 0;
@@ -341,7 +341,7 @@ function calculateAll() {
   });
 
   // RUMUS UTAMA: Tagihan - (Credit + SKR + Transfer + Kasbon + Biaya)
-  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer + totalKasbon - totalBiaya;
+  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer - totalKasbon - totalBiaya;
 
   // Total Uang Tunai / Fisik
   let totalCash = 0;
@@ -408,18 +408,24 @@ function resetAll() {
     const totalTagihanInput = document.getElementById('totalTagihanInput');
     if (totalTagihanInput) totalTagihanInput.value = '';
     
-    document.getElementById('creditRowsContainer').innerHTML = '';
-    document.getElementById('skrRowsContainer').innerHTML = '';
-    
-    const transferContainer = document.getElementById('transferRowsContainer');
-    if (transferContainer) transferContainer.innerHTML = '';
-    
-    const kasbonContainer = document.getElementById('kasbonRowsContainer');
-    if (kasbonContainer) kasbonContainer.innerHTML = '';
-    
-    const biayaContainer = document.getElementById('biayaRowsContainer');
-    if (biayaContainer) biayaContainer.innerHTML = '';
-    
+    // Reset Counter ID
+    creditRowCounter = 0;
+    skrRowCounter = 0;
+    transferRowCounter = 0;
+    kasbonRowCounter = 0;
+    biayaRowCounter = 0;
+
+    const clearContainer = (id) => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '';
+    };
+
+    clearContainer('creditRowsContainer');
+    clearContainer('skrRowsContainer');
+    clearContainer('transferRowsContainer');
+    clearContainer('kasbonRowsContainer');
+    clearContainer('biayaRowsContainer');
+
     denominations.forEach(item => {
       const elem = document.getElementById(`denom-${item.value}`);
       if (elem) elem.value = '';
