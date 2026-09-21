@@ -340,11 +340,18 @@ function calculateAll() {
     totalBiaya += parseFloat(input.value) || 0;
   });
 
-  // RUMUS SETORAN BERSIH (CASH): 
-  // Tagihan dikurangi Credit, SKR, dan Transfer. 
-  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer;
+  // LOGIKA KASBON VS BIAYA
+  // Hitung sisa kasbon setelah dipotong biaya
+  const selisihKasbonBiaya = totalKasbon - totalBiaya;
+  
+  // Jika Biaya lebih besar dari Kasbon (selisih negatif), maka kekurangannya diambil dari Cash/Setoran Bersih
+  const bebanBiayaKeCash = selisihKasbonBiaya < 0 ? Math.abs(selisihKasbonBiaya) : 0;
 
-  // RUMUS SETORAN + TRANSFER (Total tagihan yang berhasil ditagih dalam bentuk cash maupun transfer)
+  // RUMUS SETORAN BERSIH (CASH):
+  // Tagihan dikurangi Credit, SKR, Transfer, dan sisa Biaya yang tidak tertutup Kasbon
+  const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer - bebanBiayaKeCash;
+
+  // RUMUS SETORAN + TRANSFER:
   const setoranPlusTransfer = setoranBersih + totalTransfer;
 
   // Total Uang Tunai / Fisik
@@ -371,8 +378,24 @@ function calculateAll() {
   setElemText('summaryKasbon', formatRupiah(totalKasbon));
   setElemText('summaryBiaya', formatRupiah(totalBiaya));
   setElemText('summarySetoranBersih', formatRupiah(setoranBersih));
-  setElemText('summarySetoranPlusTransfer', formatRupiah(setoranPlusTransfer)); // Memperbarui card Setoran + Transfer
+  setElemText('summarySetoranPlusTransfer', formatRupiah(setoranPlusTransfer));
   setElemText('totalCashDisplay', formatRupiah(totalCash));
+
+  // Update Indikator Sisa Kasbon / Beban Biaya
+  const kasbonBiayaElem = document.getElementById('summaryKasbonMinusBiaya');
+  const subtextKasbonBiaya = document.getElementById('subtextKasbonMinusBiaya');
+
+  if (kasbonBiayaElem && subtextKasbonBiaya) {
+    if (selisihKasbonBiaya >= 0) {
+      kasbonBiayaElem.textContent = formatRupiah(selisihKasbonBiaya);
+      kasbonBiayaElem.className = "text-base sm:text-xl font-black text-emerald-400 mt-1 sm:mt-2";
+      subtextKasbonBiaya.textContent = "Sisa Kasbon (Biaya Tertutupi)";
+    } else {
+      kasbonBiayaElem.textContent = formatRupiah(selisihKasbonBiaya); // Menampilkan minus (-)
+      kasbonBiayaElem.className = "text-base sm:text-xl font-black text-rose-400 mt-1 sm:mt-2";
+      subtextKasbonBiaya.textContent = `Defisit Biaya ${formatRupiah(bebanBiayaKeCash)} diambil dari Cash`;
+    }
+  }
 
   // Status Balance Uang Fisik vs Setoran Bersih
   const statusBadge = document.getElementById('balanceStatusBadge');
