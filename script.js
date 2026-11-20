@@ -13,11 +13,14 @@ const denominations = [
   { value: 100, label: "Rp 100", type: "Keping" }
 ];
 
+const SMALL_DENOMS = [20000, 10000, 5000, 2000, 1000, 500, 200, 100];
+
 let creditRowCounter = 0;
 let skrRowCounter = 0;
 let transferRowCounter = 0;
 let kasbonRowCounter = 0;
 let biayaRowCounter = 0;
+let smallCashStoreCounter = 0;
 let saveFeedbackTimeout = null;
 
 function formatRupiah(amount) {
@@ -50,6 +53,20 @@ function updateSaveIndicator(message, isManual = false) {
       updateSaveIndicator('Auto-save aktif', false);
     }, 2500);
   }
+}
+
+function collectSmallCashStoresData() {
+  const stores = [];
+  document.querySelectorAll('.small-store-row').forEach((row) => {
+    const name = row.querySelector('.small-store-name')?.value ?? '';
+    const counts = {};
+    row.querySelectorAll('.small-store-denom').forEach((inp) => {
+      const denom = Number(inp.dataset.denom);
+      counts[denom] = inp.value;
+    });
+    stores.push({ name, counts });
+  });
+  return stores;
 }
 
 function collectState() {
@@ -117,6 +134,7 @@ function collectState() {
     transfers,
     kasbons,
     biayas,
+    smallCashStores: collectSmallCashStoresData(),
     cash
   };
 }
@@ -146,7 +164,7 @@ function loadState() {
     const tagihanEl = document.getElementById('totalTagihanInput');
     if (tagihanEl) tagihanEl.value = data.totalTagihan ?? '';
 
-    ['creditRowsContainer', 'skrRowsContainer', 'transferRowsContainer', 'kasbonRowsContainer', 'biayaRowsContainer']
+    ['creditRowsContainer', 'skrRowsContainer', 'transferRowsContainer', 'kasbonRowsContainer', 'biayaRowsContainer', 'smallCashStoresContainer']
       .forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';
@@ -157,6 +175,7 @@ function loadState() {
     transferRowCounter = 0;
     kasbonRowCounter = 0;
     biayaRowCounter = 0;
+    smallCashStoreCounter = 0;
 
     if (Array.isArray(data.credits) && data.credits.length > 0) {
       data.credits.forEach(item => addCreditRow(item.name ?? '', item.amount ?? '', false, false));
@@ -188,12 +207,23 @@ function loadState() {
       addBiayaRow('', '', false, false);
     }
 
+    const hasSmallCashStores = Array.isArray(data.smallCashStores) && data.smallCashStores.length > 0;
+    if (hasSmallCashStores) {
+      data.smallCashStores.forEach(st => addSmallCashStoreRow(st.name ?? '', st.counts ?? {}, false, false));
+    } else {
+      addSmallCashStoreRow('', {}, false, false);
+    }
+
     denominations.forEach(item => {
       const el = document.getElementById(`denom-${item.value}`);
       if (el) {
         el.value = data.cash && data.cash[item.value] !== undefined ? data.cash[item.value] : '';
       }
     });
+
+    if (hasSmallCashStores) {
+      applySmallCashStoresToDenominations(false, false);
+    }
 
     if (data.savedAt) {
       const timeStr = new Date(data.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -239,14 +269,133 @@ function renderDenominations() {
   });
 }
 
-function createDeleteButton(rowId) {
+function createDeleteButton(rowId, onDeleteCallback = null) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = "p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition";
   btn.title = "Hapus";
   btn.innerHTML = `<i class="fa-solid fa-trash-can"></i>`;
-  btn.addEventListener('click', () => removeRow(rowId));
+  btn.addEventListener('click', () => {
+    removeRow(rowId);
+    if (typeof onDeleteCallback === 'function') onDeleteCallback();
+  });
   return btn;
+}
+
+function addSmallCashStoreRow(storeName = '', counts = {}, shouldApply = true, shouldSave = true) {
+  smallCashStoreCounter++;
+  const id = smallCashStoreCounter;
+  const container = document.getElementById('smallCashStoresContainer');
+  if (!container) return;
+
+  const rowId = `small-store-row-${id}`;
+  const row = document.createElement('div');
+  row.id = rowId;
+  row.className = 'small-store-row bg-slate-900 border border-slate-700/70 rounded-xl p-3 space-y-2.5';
+
+  const topBar = document.createElement('div');
+  topBar.className = 'flex items-center justify-between gap-2';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = `Nama Toko #${id}`;
+  nameInput.value = storeName;
+  nameInput.className = 'small-store-name flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-amber-500';
+  nameInput.addEventListener('input', () => {
+    if (shouldSave) saveState(false);
+  });
+
+  const subtotalEl = document.createElement('span');
+  subtotalEl.className = 'small-store-subtotal text-xs sm:text-sm font-black text-amber-400 whitespace-nowrap';
+  subtotalEl.textContent = 'Rp 0';
+
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'p-1.5 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition';
+  delBtn.title = 'Hapus Toko';
+  delBtn.innerHTML = '<i class="fa-solid fa-trash-can text-xs"></i>';
+  delBtn.addEventListener('click', () => {
+    row.remove();
+    applySmallCashStoresToDenominations(true, true);
+  });
+
+  topBar.appendChild(nameInput);
+  topBar.appendChild(subtotalEl);
+  topBar.appendChild(delBtn);
+  row.appendChild(topBar);
+
+  const denomGrid = document.createElement('div');
+  denomGrid.className = 'grid grid-cols-2 sm:grid-cols-4 gap-2';
+
+  SMALL_DENOMS.forEach((denom) => {
+    const cell = document.createElement('div');
+    cell.className = 'bg-slate-800/70 border border-slate-700/50 rounded-lg p-2';
+
+    const lbl = document.createElement('label');
+    lbl.className = 'block text-[10px] font-bold text-slate-400 mb-1';
+    lbl.textContent = formatRupiah(denom);
+
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min = '0';
+    inp.step = '1';
+    inp.placeholder = '0';
+    inp.dataset.denom = denom;
+    inp.value = counts[denom] ?? '';
+    inp.className = 'small-store-denom w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-bold text-slate-100 focus:outline-none focus:border-amber-500';
+    inp.addEventListener('input', () => applySmallCashStoresToDenominations(true, true));
+
+    cell.appendChild(lbl);
+    cell.appendChild(inp);
+    denomGrid.appendChild(cell);
+  });
+
+  row.appendChild(denomGrid);
+  container.appendChild(row);
+
+  if (shouldApply) {
+    applySmallCashStoresToDenominations(true, shouldSave);
+  } else if (shouldSave) {
+    saveState(false);
+  }
+}
+
+function applySmallCashStoresToDenominations(shouldCalc = true, shouldSave = true) {
+  let grandSmallTotal = 0;
+  const totalsByDenom = {};
+  SMALL_DENOMS.forEach((d) => {
+    totalsByDenom[d] = 0;
+  });
+
+  document.querySelectorAll('.small-store-row').forEach((row) => {
+    let rowTotal = 0;
+    row.querySelectorAll('.small-store-denom').forEach((inp) => {
+      const denom = Number(inp.dataset.denom);
+      const qty = getNonNegativeInt(inp);
+      totalsByDenom[denom] += qty;
+      rowTotal += qty * denom;
+    });
+    grandSmallTotal += rowTotal;
+    const subEl = row.querySelector('.small-store-subtotal');
+    if (subEl) subEl.textContent = formatRupiah(rowTotal);
+  });
+
+  const badgeEl = document.getElementById('smallCashStoreTotalText');
+  if (badgeEl) badgeEl.textContent = formatRupiah(grandSmallTotal);
+
+  SMALL_DENOMS.forEach((denom) => {
+    const targetInput = document.getElementById(`denom-${denom}`);
+    if (targetInput) {
+      const sumQty = totalsByDenom[denom] || 0;
+      targetInput.value = sumQty > 0 ? String(sumQty) : '';
+    }
+  });
+
+  if (shouldCalc) {
+    calculateAll(shouldSave);
+  } else if (shouldSave) {
+    saveState(false);
+  }
 }
 
 function addCreditRow(name = '', amount = '', shouldCalculate = true, shouldSave = true) {
@@ -280,7 +429,7 @@ function addCreditRow(name = '', amount = '', shouldCalculate = true, shouldSave
   amountInput.placeholder = 'Nominal Credit';
   amountInput.value = amount;
   amountInput.className = "credit-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-blue-500 transition";
-  amountInput.addEventListener('input', calculateAll);
+  amountInput.addEventListener('input', () => calculateAll(true));
 
   amountWrapper.appendChild(amountInput);
   rightGroup.appendChild(amountWrapper);
@@ -417,7 +566,7 @@ function addTransferRow(name = '', bank = '', amount = '', shouldCalculate = tru
   amountInput.placeholder = 'Nominal Transfer';
   amountInput.value = amount;
   amountInput.className = "transfer-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-cyan-500 transition";
-  amountInput.addEventListener('input', calculateAll);
+  amountInput.addEventListener('input', () => calculateAll(true));
 
   amountWrap.appendChild(amountInput);
   rightGroup.appendChild(amountWrap);
@@ -470,7 +619,7 @@ function addKasbonRow(name = '', note = '', amount = '', shouldCalculate = true,
   amountInput.placeholder = 'Nominal Kasbon';
   amountInput.value = amount;
   amountInput.className = "kasbon-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-purple-500 transition";
-  amountInput.addEventListener('input', calculateAll);
+  amountInput.addEventListener('input', () => calculateAll(true));
 
   amountWrap.appendChild(amountInput);
   rightGroup.appendChild(amountWrap);
@@ -516,7 +665,7 @@ function addBiayaRow(description = '', amount = '', shouldCalculate = true, shou
   amountInput.placeholder = 'Nominal Biaya';
   amountInput.value = amount;
   amountInput.className = "biaya-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500 transition";
-  amountInput.addEventListener('input', calculateAll);
+  amountInput.addEventListener('input', () => calculateAll(true));
 
   amountWrap.appendChild(amountInput);
   rightGroup.appendChild(amountWrap);
@@ -655,8 +804,9 @@ function resetAll() {
     transferRowCounter = 0;
     kasbonRowCounter = 0;
     biayaRowCounter = 0;
+    smallCashStoreCounter = 0;
 
-    ['creditRowsContainer', 'skrRowsContainer', 'transferRowsContainer', 'kasbonRowsContainer', 'biayaRowsContainer']
+    ['creditRowsContainer', 'skrRowsContainer', 'transferRowsContainer', 'kasbonRowsContainer', 'biayaRowsContainer', 'smallCashStoresContainer']
       .forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';
@@ -672,6 +822,8 @@ function resetAll() {
     addTransferRow('', '', '', false, false);
     addKasbonRow('', '', '', false, false);
     addBiayaRow('', '', false, false);
+    addSmallCashStoreRow('', {}, false, false);
+    applySmallCashStoresToDenominations(false, false);
     calculateAll(false);
     updateSaveIndicator('Data direset (auto-save aktif)', false);
   }
@@ -686,6 +838,7 @@ window.addEventListener('DOMContentLoaded', () => {
     addTransferRow('', '', '', false, false);
     addKasbonRow('', '', '', false, false);
     addBiayaRow('', '', false, false);
+    addSmallCashStoreRow('', {}, false, false);
   }
   calculateAll(false);
 });
