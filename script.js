@@ -1,4 +1,5 @@
-// Daftar pecahan uang Rupiah
+const STORAGE_KEY = 'kalkulator_setoran_collector_v1';
+
 const denominations = [
   { value: 100000, label: "Rp 100.000", type: "Kertas" },
   { value: 50000, label: "Rp 50.000", type: "Kertas" },
@@ -17,8 +18,8 @@ let skrRowCounter = 0;
 let transferRowCounter = 0;
 let kasbonRowCounter = 0;
 let biayaRowCounter = 0;
+let saveFeedbackTimeout = null;
 
-// Format Angka ke Rupiah
 function formatRupiah(amount) {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -27,7 +28,185 @@ function formatRupiah(amount) {
   }).format(amount);
 }
 
-// Generate Komponen Pecahan Uang
+function getNonNegativeInt(inputOrId) {
+  const el = typeof inputOrId === 'string' ? document.getElementById(inputOrId) : inputOrId;
+  if (!el) return 0;
+  const val = parseInt(el.value, 10);
+  return Number.isNaN(val) || val < 0 ? 0 : val;
+}
+
+function updateSaveIndicator(message, isManual = false) {
+  const el = document.getElementById('saveStatusText');
+  if (!el) return;
+
+  el.innerHTML = `<i class="fa-solid ${isManual ? 'fa-check-double' : 'fa-cloud-check'}"></i> ${message}`;
+  el.className = isManual
+    ? "text-[11px] text-emerald-300 font-semibold mt-1.5 flex items-center justify-center md:justify-start gap-1.5"
+    : "text-[11px] text-emerald-400/90 mt-1.5 flex items-center justify-center md:justify-start gap-1.5";
+
+  if (isManual) {
+    clearTimeout(saveFeedbackTimeout);
+    saveFeedbackTimeout = setTimeout(() => {
+      updateSaveIndicator('Auto-save aktif', false);
+    }, 2500);
+  }
+}
+
+function collectState() {
+  const tagihanEl = document.getElementById('totalTagihanInput');
+
+  const credits = [];
+  document.querySelectorAll('#creditRowsContainer > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    credits.push({
+      name: inputs[0]?.value ?? '',
+      amount: inputs[1]?.value ?? ''
+    });
+  });
+
+  const skrs = [];
+  document.querySelectorAll('#skrRowsContainer > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    skrs.push({
+      name: inputs[0]?.value ?? '',
+      awal: inputs[1]?.value ?? '',
+      akhir: inputs[2]?.value ?? ''
+    });
+  });
+
+  const transfers = [];
+  document.querySelectorAll('#transferRowsContainer > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    transfers.push({
+      name: inputs[0]?.value ?? '',
+      bank: inputs[1]?.value ?? '',
+      amount: inputs[2]?.value ?? ''
+    });
+  });
+
+  const kasbons = [];
+  document.querySelectorAll('#kasbonRowsContainer > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    kasbons.push({
+      name: inputs[0]?.value ?? '',
+      note: inputs[1]?.value ?? '',
+      amount: inputs[2]?.value ?? ''
+    });
+  });
+
+  const biayas = [];
+  document.querySelectorAll('#biayaRowsContainer > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    biayas.push({
+      description: inputs[0]?.value ?? '',
+      amount: inputs[1]?.value ?? ''
+    });
+  });
+
+  const cash = {};
+  denominations.forEach(item => {
+    const el = document.getElementById(`denom-${item.value}`);
+    cash[item.value] = el ? el.value : '';
+  });
+
+  return {
+    savedAt: new Date().toISOString(),
+    totalTagihan: tagihanEl ? tagihanEl.value : '',
+    credits,
+    skrs,
+    transfers,
+    kasbons,
+    biayas,
+    cash
+  };
+}
+
+function saveState(showManualFeedback = false) {
+  try {
+    const data = collectState();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    updateSaveIndicator(
+      showManualFeedback ? `Tersimpan manual (${timeStr})` : `Auto-save tersimpan (${timeStr})`,
+      showManualFeedback
+    );
+  } catch (err) {
+    console.warn('Gagal menyimpan ke localStorage:', err);
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return false;
+
+    const tagihanEl = document.getElementById('totalTagihanInput');
+    if (tagihanEl) tagihanEl.value = data.totalTagihan ?? '';
+
+    ['creditRowsContainer', 'skrRowsContainer', 'transferRowsContainer', 'kasbonRowsContainer', 'biayaRowsContainer']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+      });
+
+    creditRowCounter = 0;
+    skrRowCounter = 0;
+    transferRowCounter = 0;
+    kasbonRowCounter = 0;
+    biayaRowCounter = 0;
+
+    if (Array.isArray(data.credits) && data.credits.length > 0) {
+      data.credits.forEach(item => addCreditRow(item.name ?? '', item.amount ?? '', false, false));
+    } else {
+      addCreditRow('', '', false, false);
+    }
+
+    if (Array.isArray(data.skrs) && data.skrs.length > 0) {
+      data.skrs.forEach(item => addSkrRow(item.name ?? '', item.awal ?? '', item.akhir ?? '', false, false));
+    } else {
+      addSkrRow('', '', '', false, false);
+    }
+
+    if (Array.isArray(data.transfers) && data.transfers.length > 0) {
+      data.transfers.forEach(item => addTransferRow(item.name ?? '', item.bank ?? '', item.amount ?? '', false, false));
+    } else {
+      addTransferRow('', '', '', false, false);
+    }
+
+    if (Array.isArray(data.kasbons) && data.kasbons.length > 0) {
+      data.kasbons.forEach(item => addKasbonRow(item.name ?? '', item.note ?? '', item.amount ?? '', false, false));
+    } else {
+      addKasbonRow('', '', '', false, false);
+    }
+
+    if (Array.isArray(data.biayas) && data.biayas.length > 0) {
+      data.biayas.forEach(item => addBiayaRow(item.description ?? '', item.amount ?? '', false, false));
+    } else {
+      addBiayaRow('', '', false, false);
+    }
+
+    denominations.forEach(item => {
+      const el = document.getElementById(`denom-${item.value}`);
+      if (el) {
+        el.value = data.cash && data.cash[item.value] !== undefined ? data.cash[item.value] : '';
+      }
+    });
+
+    if (data.savedAt) {
+      const timeStr = new Date(data.savedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      updateSaveIndicator(`Data dipulihkan (tersimpan ${timeStr})`, false);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Gagal memuat data dari localStorage:', err);
+    return false;
+  }
+}
+
 function renderDenominations() {
   const container = document.getElementById('cashDenominationsContainer');
   if (!container) return;
@@ -45,6 +224,7 @@ function renderDenominations() {
         <input 
           type="number" 
           min="0" 
+          step="1"
           placeholder="0"
           id="denom-${item.value}"
           oninput="calculateAll()"
@@ -59,313 +239,336 @@ function renderDenominations() {
   });
 }
 
-// 1. Tambah Baris Toko Credit
-function addCreditRow(name = '', amount = '') {
+function createDeleteButton(rowId) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = "p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition";
+  btn.title = "Hapus";
+  btn.innerHTML = `<i class="fa-solid fa-trash-can"></i>`;
+  btn.addEventListener('click', () => removeRow(rowId));
+  return btn;
+}
+
+function addCreditRow(name = '', amount = '', shouldCalculate = true, shouldSave = true) {
   creditRowCounter++;
   const container = document.getElementById('creditRowsContainer');
   if (!container) return;
-  
+
+  const rowId = `credit-row-${creditRowCounter}`;
   const rowDiv = document.createElement('div');
-  rowDiv.id = `credit-row-${creditRowCounter}`;
-  rowDiv.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900 p-3 sm:p-2.5 rounded-xl border border-slate-700/60 relative";
-  rowDiv.innerHTML = `
-    <input 
-      type="text" 
-      placeholder="Nama Toko" 
-      value="${name}"
-      class="w-full sm:flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-blue-500 transition"
-    />
-    <div class="flex items-center gap-2 w-full sm:flex-1">
-      <div class="relative flex-1">
-        <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>
-        <input 
-          type="number" 
-          placeholder="Nominal Credit" 
-          value="${amount}"
-          oninput="calculateAll()"
-          class="credit-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-blue-500 transition"
-        />
-      </div>
-      <button onclick="removeRow('credit-row-${creditRowCounter}')" class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition" title="Hapus">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
-    </div>
-  `;
+  rowDiv.id = rowId;
+  rowDiv.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900 p-3 sm:p-2.5 rounded-xl border border-slate-700/60";
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Nama Toko';
+  nameInput.value = name;
+  nameInput.className = "w-full sm:flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-blue-500 transition";
+  nameInput.addEventListener('input', () => saveState(false));
+
+  const rightGroup = document.createElement('div');
+  rightGroup.className = "flex items-center gap-2 w-full sm:flex-1";
+
+  const amountWrapper = document.createElement('div');
+  amountWrapper.className = "relative flex-1";
+  amountWrapper.innerHTML = `<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>`;
+
+  const amountInput = document.createElement('input');
+  amountInput.type = 'number';
+  amountInput.min = '0';
+  amountInput.step = '1';
+  amountInput.placeholder = 'Nominal Credit';
+  amountInput.value = amount;
+  amountInput.className = "credit-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-blue-500 transition";
+  amountInput.addEventListener('input', calculateAll);
+
+  amountWrapper.appendChild(amountInput);
+  rightGroup.appendChild(amountWrapper);
+  rightGroup.appendChild(createDeleteButton(rowId));
+
+  rowDiv.appendChild(nameInput);
+  rowDiv.appendChild(rightGroup);
   container.appendChild(rowDiv);
-  calculateAll();
+
+  if (shouldCalculate) calculateAll(shouldSave);
+  else if (shouldSave) saveState(false);
 }
 
-// 2. Tambah Baris Toko SKR / Retur
-function addSkrRow(name = '', tagihanAwal = '', tagihanAkhir = '') {
+function addSkrRow(name = '', tagihanAwal = '', tagihanAkhir = '', shouldCalculate = true, shouldSave = true) {
   skrRowCounter++;
   const container = document.getElementById('skrRowsContainer');
   if (!container) return;
 
+  const id = skrRowCounter;
+  const rowId = `skr-row-${id}`;
   const rowDiv = document.createElement('div');
-  rowDiv.id = `skr-row-${skrRowCounter}`;
+  rowDiv.id = rowId;
   rowDiv.className = "flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-slate-900 p-3 rounded-xl border border-slate-700/60";
-  
-  rowDiv.innerHTML = `
-    <input 
-      type="text" 
-      placeholder="Nama Toko" 
-      value="${name}" 
-      class="w-full md:w-1/4 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition" 
-    />
-    <div class="relative flex-1">
-      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-slate-400">Awal: Rp</span>
-      <input 
-        type="number" 
-        placeholder="Tagihan Awal" 
-        value="${tagihanAwal}" 
-        id="skr-awal-${skrRowCounter}"
-        oninput="updateSkrItemCalculation(${skrRowCounter})" 
-        class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition" 
-      />
-    </div>
-    <div class="relative flex-1">
-      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-slate-400">Akhir: Rp</span>
-      <input 
-        type="number" 
-        placeholder="Tagihan Akhir" 
-        value="${tagihanAkhir}" 
-        id="skr-akhir-${skrRowCounter}"
-        oninput="updateSkrItemCalculation(${skrRowCounter})" 
-        class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition" 
-      />
-    </div>
-    <div class="relative flex-1">
-      <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-amber-400">SKR: Rp</span>
-      <input 
-        type="number" 
-        placeholder="0" 
-        readonly 
-        id="skr-result-${skrRowCounter}"
-        class="skr-amount-input w-full bg-slate-800/80 border border-amber-500/40 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-black text-amber-400 focus:outline-none cursor-not-allowed" 
-      />
-    </div>
-    <button 
-      onclick="removeRow('skr-row-${skrRowCounter}')" 
-      class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition" 
-      title="Hapus"
-    >
-      <i class="fa-solid fa-trash-can"></i>
-    </button>
-  `;
 
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Nama Toko';
+  nameInput.value = name;
+  nameInput.className = "w-full md:w-1/4 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition";
+  nameInput.addEventListener('input', () => saveState(false));
+
+  const awalWrap = document.createElement('div');
+  awalWrap.className = "relative flex-1";
+  awalWrap.innerHTML = `<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-slate-400">Awal: Rp</span>`;
+  const awalInput = document.createElement('input');
+  awalInput.type = 'number';
+  awalInput.min = '0';
+  awalInput.step = '1';
+  awalInput.placeholder = 'Tagihan Awal';
+  awalInput.value = tagihanAwal;
+  awalInput.id = `skr-awal-${id}`;
+  awalInput.className = "w-full bg-slate-800 border border-slate-700 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition";
+  awalInput.addEventListener('input', () => updateSkrItemCalculation(id, true, true));
+  awalWrap.appendChild(awalInput);
+
+  const akhirWrap = document.createElement('div');
+  akhirWrap.className = "relative flex-1";
+  akhirWrap.innerHTML = `<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-slate-400">Akhir: Rp</span>`;
+  const akhirInput = document.createElement('input');
+  akhirInput.type = 'number';
+  akhirInput.min = '0';
+  akhirInput.step = '1';
+  akhirInput.placeholder = 'Tagihan Akhir';
+  akhirInput.value = tagihanAkhir;
+  akhirInput.id = `skr-akhir-${id}`;
+  akhirInput.className = "w-full bg-slate-800 border border-slate-700 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-amber-500 transition";
+  akhirInput.addEventListener('input', () => updateSkrItemCalculation(id, true, true));
+  akhirWrap.appendChild(akhirInput);
+
+  const resWrap = document.createElement('div');
+  resWrap.className = "relative flex-1";
+  resWrap.innerHTML = `<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-[10px] font-bold text-amber-400">SKR: Rp</span>`;
+  const resInput = document.createElement('input');
+  resInput.type = 'number';
+  resInput.readOnly = true;
+  resInput.placeholder = '0';
+  resInput.id = `skr-result-${id}`;
+  resInput.className = "skr-amount-input w-full bg-slate-800/80 border border-amber-500/40 rounded-lg pl-14 pr-2.5 py-2 text-xs sm:text-sm font-black text-amber-400 focus:outline-none cursor-not-allowed";
+  resWrap.appendChild(resInput);
+
+  rowDiv.appendChild(nameInput);
+  rowDiv.appendChild(awalWrap);
+  rowDiv.appendChild(akhirWrap);
+  rowDiv.appendChild(resWrap);
+  rowDiv.appendChild(createDeleteButton(rowId));
   container.appendChild(rowDiv);
-  if (tagihanAwal || tagihanAkhir) {
-    updateSkrItemCalculation(skrRowCounter);
-  } else {
-    calculateAll();
+
+  if (tagihanAwal !== '' || tagihanAkhir !== '') {
+    updateSkrItemCalculation(id, shouldCalculate, shouldSave);
+  } else if (shouldCalculate) {
+    calculateAll(shouldSave);
+  } else if (shouldSave) {
+    saveState(false);
   }
 }
 
-function updateSkrItemCalculation(rowId) {
-  const awalElem = document.getElementById(`skr-awal-${rowId}`);
-  const akhirElem = document.getElementById(`skr-akhir-${rowId}`);
+function updateSkrItemCalculation(rowId, shouldCalculate = true, shouldSave = true) {
   const resultElem = document.getElementById(`skr-result-${rowId}`);
+  if (!resultElem) return;
 
-  if (!awalElem || !akhirElem || !resultElem) return;
+  const awal = getNonNegativeInt(`skr-awal-${rowId}`);
+  const akhir = getNonNegativeInt(`skr-akhir-${rowId}`);
+  resultElem.value = Math.max(0, awal - akhir);
 
-  const awal = parseFloat(awalElem.value) || 0;
-  const akhir = parseFloat(akhirElem.value) || 0;
-  const nominalSkr = Math.max(0, awal - akhir);
-
-  resultElem.value = nominalSkr > 0 ? nominalSkr : 0;
-  calculateAll();
+  if (shouldCalculate) calculateAll(shouldSave);
+  else if (shouldSave) saveState(false);
 }
 
-// 3. Tambah Baris Transfer Bank
-function addTransferRow(name = '', bank = '', amount = '') {
+function addTransferRow(name = '', bank = '', amount = '', shouldCalculate = true, shouldSave = true) {
   transferRowCounter++;
   const container = document.getElementById('transferRowsContainer');
   if (!container) return;
 
+  const rowId = `transfer-row-${transferRowCounter}`;
   const rowDiv = document.createElement('div');
-  rowDiv.id = `transfer-row-${transferRowCounter}`;
+  rowDiv.id = rowId;
   rowDiv.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900 p-3 sm:p-2.5 rounded-xl border border-slate-700/60";
-  rowDiv.innerHTML = `
-    <input 
-      type="text" 
-      placeholder="Nama Toko / Pengirim" 
-      value="${name}"
-      class="w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-cyan-500 transition"
-    />
-    <input 
-      type="text" 
-      placeholder="Bank / Metode (BCA, Mandiri, dll)" 
-      value="${bank}"
-      class="w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-cyan-500 transition"
-    />
-    <div class="flex items-center gap-2 w-full sm:w-1/3">
-      <div class="relative flex-1">
-        <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>
-        <input 
-          type="number" 
-          placeholder="Nominal Transfer" 
-          value="${amount}"
-          oninput="calculateAll()"
-          class="transfer-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-cyan-500 transition"
-        />
-      </div>
-      <button onclick="removeRow('transfer-row-${transferRowCounter}')" class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition" title="Hapus">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
-    </div>
-  `;
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Nama Toko / Pengirim';
+  nameInput.value = name;
+  nameInput.className = "w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-cyan-500 transition";
+  nameInput.addEventListener('input', () => saveState(false));
+
+  const bankInput = document.createElement('input');
+  bankInput.type = 'text';
+  bankInput.placeholder = 'Bank / Metode (BCA, Mandiri, dll)';
+  bankInput.value = bank;
+  bankInput.className = "w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-cyan-500 transition";
+  bankInput.addEventListener('input', () => saveState(false));
+
+  const rightGroup = document.createElement('div');
+  rightGroup.className = "flex items-center gap-2 w-full sm:w-1/3";
+
+  const amountWrap = document.createElement('div');
+  amountWrap.className = "relative flex-1";
+  amountWrap.innerHTML = `<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>`;
+
+  const amountInput = document.createElement('input');
+  amountInput.type = 'number';
+  amountInput.min = '0';
+  amountInput.step = '1';
+  amountInput.placeholder = 'Nominal Transfer';
+  amountInput.value = amount;
+  amountInput.className = "transfer-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-cyan-500 transition";
+  amountInput.addEventListener('input', calculateAll);
+
+  amountWrap.appendChild(amountInput);
+  rightGroup.appendChild(amountWrap);
+  rightGroup.appendChild(createDeleteButton(rowId));
+
+  rowDiv.appendChild(nameInput);
+  rowDiv.appendChild(bankInput);
+  rowDiv.appendChild(rightGroup);
   container.appendChild(rowDiv);
-  calculateAll();
+
+  if (shouldCalculate) calculateAll(shouldSave);
+  else if (shouldSave) saveState(false);
 }
 
-// 4. Tambah Baris Kasbon Karyawan / Driver
-function addKasbonRow(name = '', note = '', amount = '') {
+function addKasbonRow(name = '', note = '', amount = '', shouldCalculate = true, shouldSave = true) {
   kasbonRowCounter++;
   const container = document.getElementById('kasbonRowsContainer');
   if (!container) return;
 
+  const rowId = `kasbon-row-${kasbonRowCounter}`;
   const rowDiv = document.createElement('div');
-  rowDiv.id = `kasbon-row-${kasbonRowCounter}`;
+  rowDiv.id = rowId;
   rowDiv.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900 p-3 sm:p-2.5 rounded-xl border border-slate-700/60";
-  rowDiv.innerHTML = `
-    <input 
-      type="text" 
-      placeholder="Nama Karyawan" 
-      value="${name}"
-      class="w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition"
-    />
-    <input 
-      type="text" 
-      placeholder="Keterangan" 
-      value="${note}"
-      class="w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition"
-    />
-    <div class="flex items-center gap-2 w-full sm:w-1/3">
-      <div class="relative flex-1">
-        <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>
-        <input 
-          type="number" 
-          placeholder="Nominal Kasbon" 
-          value="${amount}"
-          oninput="calculateAll()"
-          class="kasbon-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-purple-500 transition"
-        />
-      </div>
-      <button onclick="removeRow('kasbon-row-${kasbonRowCounter}')" class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition" title="Hapus">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
-    </div>
-  `;
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Nama Karyawan';
+  nameInput.value = name;
+  nameInput.className = "w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition";
+  nameInput.addEventListener('input', () => saveState(false));
+
+  const noteInput = document.createElement('input');
+  noteInput.type = 'text';
+  noteInput.placeholder = 'Keterangan';
+  noteInput.value = note;
+  noteInput.className = "w-full sm:w-1/3 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition";
+  noteInput.addEventListener('input', () => saveState(false));
+
+  const rightGroup = document.createElement('div');
+  rightGroup.className = "flex items-center gap-2 w-full sm:w-1/3";
+
+  const amountWrap = document.createElement('div');
+  amountWrap.className = "relative flex-1";
+  amountWrap.innerHTML = `<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>`;
+
+  const amountInput = document.createElement('input');
+  amountInput.type = 'number';
+  amountInput.min = '0';
+  amountInput.step = '1';
+  amountInput.placeholder = 'Nominal Kasbon';
+  amountInput.value = amount;
+  amountInput.className = "kasbon-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-purple-500 transition";
+  amountInput.addEventListener('input', calculateAll);
+
+  amountWrap.appendChild(amountInput);
+  rightGroup.appendChild(amountWrap);
+  rightGroup.appendChild(createDeleteButton(rowId));
+
+  rowDiv.appendChild(nameInput);
+  rowDiv.appendChild(noteInput);
+  rowDiv.appendChild(rightGroup);
   container.appendChild(rowDiv);
-  calculateAll();
+
+  if (shouldCalculate) calculateAll(shouldSave);
+  else if (shouldSave) saveState(false);
 }
 
-// 5. Tambah Baris Biaya Operasional
-function addBiayaRow(description = '', amount = '') {
+function addBiayaRow(description = '', amount = '', shouldCalculate = true, shouldSave = true) {
   biayaRowCounter++;
   const container = document.getElementById('biayaRowsContainer');
   if (!container) return;
 
+  const rowId = `biaya-row-${biayaRowCounter}`;
   const rowDiv = document.createElement('div');
-  rowDiv.id = `biaya-row-${biayaRowCounter}`;
+  rowDiv.id = rowId;
   rowDiv.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-900 p-3 sm:p-2.5 rounded-xl border border-slate-700/60";
-  rowDiv.innerHTML = `
-    <input 
-      type="text" 
-      placeholder="Keterangan Biaya (Bensin, Parkir, Tol, dll)" 
-      value="${description}"
-      class="w-full sm:flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-emerald-500 transition"
-    />
-    <div class="flex items-center gap-2 w-full sm:flex-1">
-      <div class="relative flex-1">
-        <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>
-        <input 
-          type="number" 
-          placeholder="Nominal Biaya" 
-          value="${amount}"
-          oninput="calculateAll()"
-          class="biaya-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500 transition"
-        />
-      </div>
-      <button onclick="removeRow('biaya-row-${biayaRowCounter}')" class="p-2 bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 rounded-lg border border-slate-700 transition" title="Hapus">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
-    </div>
-  `;
+
+  const descInput = document.createElement('input');
+  descInput.type = 'text';
+  descInput.placeholder = 'Keterangan Biaya (Bensin, Parkir, Tol, dll)';
+  descInput.value = description;
+  descInput.className = "w-full sm:flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-slate-100 focus:outline-none focus:border-emerald-500 transition";
+  descInput.addEventListener('input', () => saveState(false));
+
+  const rightGroup = document.createElement('div');
+  rightGroup.className = "flex items-center gap-2 w-full sm:flex-1";
+
+  const amountWrap = document.createElement('div');
+  amountWrap.className = "relative flex-1";
+  amountWrap.innerHTML = `<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400">Rp</span>`;
+
+  const amountInput = document.createElement('input');
+  amountInput.type = 'number';
+  amountInput.min = '0';
+  amountInput.step = '1';
+  amountInput.placeholder = 'Nominal Biaya';
+  amountInput.value = amount;
+  amountInput.className = "biaya-amount-input w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs sm:text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500 transition";
+  amountInput.addEventListener('input', calculateAll);
+
+  amountWrap.appendChild(amountInput);
+  rightGroup.appendChild(amountWrap);
+  rightGroup.appendChild(createDeleteButton(rowId));
+
+  rowDiv.appendChild(descInput);
+  rowDiv.appendChild(rightGroup);
   container.appendChild(rowDiv);
-  calculateAll();
+
+  if (shouldCalculate) calculateAll(shouldSave);
+  else if (shouldSave) saveState(false);
 }
 
-// Hapus Baris Elemen
 function removeRow(rowId) {
   const row = document.getElementById(rowId);
   if (row) {
     row.remove();
-    calculateAll();
+    calculateAll(true);
   }
 }
 
-// Kalkulasi Utama
-function calculateAll() {
-  const tagihanElem = document.getElementById('totalTagihanInput');
-  const tagihanInput = tagihanElem ? (parseFloat(tagihanElem.value) || 0) : 0;
-
-  // 1. Total Credit
-  let totalCredit = 0;
-  document.querySelectorAll('.credit-amount-input').forEach(input => {
-    totalCredit += parseFloat(input.value) || 0;
+function sumInputsByClass(className) {
+  let total = 0;
+  document.querySelectorAll(`.${className}`).forEach(input => {
+    total += getNonNegativeInt(input);
   });
+  return total;
+}
 
-  // 2. Total SKR
-  let totalSkr = 0;
-  document.querySelectorAll('.skr-amount-input').forEach(input => {
-    totalSkr += parseFloat(input.value) || 0;
-  });
+function calculateAll(shouldSave = true) {
+  const tagihanInput = getNonNegativeInt('totalTagihanInput');
+  const totalCredit = sumInputsByClass('credit-amount-input');
+  const totalSkr = sumInputsByClass('skr-amount-input');
+  const totalTransfer = sumInputsByClass('transfer-amount-input');
+  const totalKasbon = sumInputsByClass('kasbon-amount-input');
+  const totalBiaya = sumInputsByClass('biaya-amount-input');
 
-  // 3. Total Transfer
-  let totalTransfer = 0;
-  document.querySelectorAll('.transfer-amount-input').forEach(input => {
-    totalTransfer += parseFloat(input.value) || 0;
-  });
-
-  // 4. Total Kasbon
-  let totalKasbon = 0;
-  document.querySelectorAll('.kasbon-amount-input').forEach(input => {
-    totalKasbon += parseFloat(input.value) || 0;
-  });
-
-  // 5. Total Biaya
-  let totalBiaya = 0;
-  document.querySelectorAll('.biaya-amount-input').forEach(input => {
-    totalBiaya += parseFloat(input.value) || 0;
-  });
-
-  // LOGIKA KASBON VS BIAYA
-  // Hitung sisa kasbon setelah dipotong biaya
   const selisihKasbonBiaya = totalKasbon - totalBiaya;
-  
-  // Jika Biaya lebih besar dari Kasbon (selisih negatif), maka kekurangannya diambil dari Cash/Setoran Bersih
   const bebanBiayaKeCash = selisihKasbonBiaya < 0 ? Math.abs(selisihKasbonBiaya) : 0;
 
-  // RUMUS SETORAN BERSIH (CASH):
-  // Tagihan dikurangi Credit, SKR, Transfer, dan sisa Biaya yang tidak tertutup Kasbon
   const setoranBersih = tagihanInput - totalCredit - totalSkr - totalTransfer - bebanBiayaKeCash;
-
-  // RUMUS SETORAN + TRANSFER:
   const setoranPlusTransfer = setoranBersih + totalTransfer;
 
-  // Total Uang Tunai / Fisik
   let totalCash = 0;
   denominations.forEach(item => {
-    const elem = document.getElementById(`denom-${item.value}`);
-    const qty = elem ? (parseFloat(elem.value) || 0) : 0;
+    const qty = getNonNegativeInt(`denom-${item.value}`);
     const subtotal = qty * item.value;
     totalCash += subtotal;
     const subtotalElem = document.getElementById(`subtotal-${item.value}`);
     if (subtotalElem) subtotalElem.textContent = formatRupiah(subtotal);
   });
 
-  // Update Tampilan Rincian Ringkasan
   const setElemText = (id, text) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -381,7 +584,6 @@ function calculateAll() {
   setElemText('summarySetoranPlusTransfer', formatRupiah(setoranPlusTransfer));
   setElemText('totalCashDisplay', formatRupiah(totalCash));
 
-  // Update Indikator Sisa Kasbon / Beban Biaya
   const kasbonBiayaElem = document.getElementById('summaryKasbonMinusBiaya');
   const subtextKasbonBiaya = document.getElementById('subtextKasbonMinusBiaya');
 
@@ -391,25 +593,30 @@ function calculateAll() {
       kasbonBiayaElem.className = "text-base sm:text-xl font-black text-emerald-400 mt-1 sm:mt-2";
       subtextKasbonBiaya.textContent = "Sisa Kasbon (Biaya Tertutupi)";
     } else {
-      kasbonBiayaElem.textContent = formatRupiah(selisihKasbonBiaya); // Menampilkan minus (-)
+      kasbonBiayaElem.textContent = formatRupiah(selisihKasbonBiaya);
       kasbonBiayaElem.className = "text-base sm:text-xl font-black text-rose-400 mt-1 sm:mt-2";
       subtextKasbonBiaya.textContent = `Defisit Biaya ${formatRupiah(bebanBiayaKeCash)} diambil dari Cash`;
     }
   }
 
-  // Status Balance Uang Fisik vs Setoran Bersih
   const statusBadge = document.getElementById('balanceStatusBadge');
   const differenceText = document.getElementById('balanceDifferenceText');
-
   if (!statusBadge || !differenceText) return;
 
-  const isAllZero = tagihanInput === 0 && totalCash === 0 && totalCredit === 0 && 
-                    totalSkr === 0 && totalTransfer === 0 && totalKasbon === 0 && totalBiaya === 0;
+  const isAllZero =
+    tagihanInput === 0 &&
+    totalCash === 0 &&
+    totalCredit === 0 &&
+    totalSkr === 0 &&
+    totalTransfer === 0 &&
+    totalKasbon === 0 &&
+    totalBiaya === 0;
 
   if (isAllZero) {
     statusBadge.className = "inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-base font-bold bg-slate-700 text-slate-300";
     statusBadge.innerHTML = `<i class="fa-solid fa-circle-info"></i> Masukkan data untuk melihat status`;
     differenceText.textContent = "";
+    if (shouldSave) saveState(false);
     return;
   }
 
@@ -428,51 +635,57 @@ function calculateAll() {
     statusBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> UANG KURANG (${formatRupiah(Math.abs(diff))})`;
     differenceText.textContent = `Fisik uang tunai kurang ${formatRupiah(Math.abs(diff))} dari setoran bersih!`;
   }
+
+  if (shouldSave) saveState(false);
 }
 
-// Reset Semua Data
 function resetAll() {
-  if (confirm('Apakah Anda yakin ingin mereset seluruh perhitungan?')) {
+  if (confirm('Apakah Anda yakin ingin mereset seluruh perhitungan dan menghapus data tersimpan?')) {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      console.warn('Gagal menghapus data localStorage:', err);
+    }
+
     const totalTagihanInput = document.getElementById('totalTagihanInput');
     if (totalTagihanInput) totalTagihanInput.value = '';
-    
-    // Reset Counter ID
+
     creditRowCounter = 0;
     skrRowCounter = 0;
     transferRowCounter = 0;
     kasbonRowCounter = 0;
     biayaRowCounter = 0;
 
-    const clearContainer = (id) => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = '';
-    };
-
-    clearContainer('creditRowsContainer');
-    clearContainer('skrRowsContainer');
-    clearContainer('transferRowsContainer');
-    clearContainer('kasbonRowsContainer');
-    clearContainer('biayaRowsContainer');
+    ['creditRowsContainer', 'skrRowsContainer', 'transferRowsContainer', 'kasbonRowsContainer', 'biayaRowsContainer']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+      });
 
     denominations.forEach(item => {
       const elem = document.getElementById(`denom-${item.value}`);
       if (elem) elem.value = '';
     });
-    
-    addCreditRow();
-    addSkrRow();
-    addTransferRow();
-    addKasbonRow();
-    addBiayaRow();
-    calculateAll();
+
+    addCreditRow('', '', false, false);
+    addSkrRow('', '', '', false, false);
+    addTransferRow('', '', '', false, false);
+    addKasbonRow('', '', '', false, false);
+    addBiayaRow('', '', false, false);
+    calculateAll(false);
+    updateSaveIndicator('Data direset (auto-save aktif)', false);
   }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
   renderDenominations();
-  addCreditRow();
-  addSkrRow();
-  addTransferRow();
-  addKasbonRow();
-  addBiayaRow();
+  const restored = loadState();
+  if (!restored) {
+    addCreditRow('', '', false, false);
+    addSkrRow('', '', '', false, false);
+    addTransferRow('', '', '', false, false);
+    addKasbonRow('', '', '', false, false);
+    addBiayaRow('', '', false, false);
+  }
+  calculateAll(false);
 });
